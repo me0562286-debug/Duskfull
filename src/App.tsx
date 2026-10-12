@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import {
   Play, Pause, SkipBack, SkipForward, Shuffle, Repeat, Repeat1, Heart,
-  ChevronDown, LibraryBig, Search, Plus, ArrowDownUp, Music2, ListMusic, X,
+  ChevronDown, LibraryBig, Search, Plus, ArrowDownUp, Music2, ListMusic, X, ListPlus, Trash2, Check,
 } from 'lucide-react';
 import Backdrop from '@/components/Backdrop';
 import CoverOrb, { coverStyle } from '@/components/CoverOrb';
@@ -12,7 +12,9 @@ import CoverArt from '@/components/CoverArt';
 import { isNative, scanNative, pushMedia, onMediaAction } from '@/lib/native';
 
 type SortDir = 'oldest' | 'newest';
-type Tab = 'songs' | 'albums' | 'artists';
+type Tab = 'songs' | 'albums' | 'artists' | 'liked' | 'lists';
+interface Playlist { id: string; name: string; ids: string[] }
+const load = <T,>(k: string, d: T): T => { try { const v = localStorage.getItem(k); return v ? (JSON.parse(v) as T) : d; } catch { return d; } };
 type RepeatMode = 'off' | 'all' | 'one';
 
 const fmt = (s: number) => {
@@ -43,7 +45,13 @@ export default function App() {
   const [queueOpen, setQueueOpen] = useState(false);
   const snap = useEngine();
   const fileRef = useRef<HTMLInputElement>(null);
-  const likedRef = useRef<Set<string>>(new Set());
+  const [liked, setLiked] = useState<Set<string>>(() => new Set(load<string[]>('df-liked', [])));
+  const [playlists, setPlaylists] = useState<Playlist[]>(() => load<Playlist[]>('df-lists', []));
+  const [queueIds, setQueueIds] = useState<string[] | null>(null);
+  const [addFor, setAddFor] = useState<string | null>(null);
+  const [newName, setNewName] = useState('');
+  useEffect(() => { try { localStorage.setItem('df-liked', JSON.stringify([...liked])); } catch { /* ignore */ } }, [liked]);
+  useEffect(() => { try { localStorage.setItem('df-lists', JSON.stringify(playlists)); } catch { /* ignore */ } }, [playlists]);
 
   // boot: synthesize demo constellation
   useEffect(() => {
@@ -73,21 +81,28 @@ export default function App() {
 
   const current = tracks.find((t) => t.id === snap.id) ?? null;
 
-  const playAt = (track: Track) => {
+  const shown = tab === 'liked' ? ordered.filter((t) => liked.has(t.id)) : ordered;
+  const queue = useMemo(
+    () => (queueIds ? (queueIds.map((id) => tracks.find((t) => t.id === id)).filter(Boolean) as Track[]) : ordered),
+    [queueIds, tracks, ordered],
+  );
+
+  const playAt = (track: Track, list?: Track[]) => {
+    setQueueIds(list ? list.map((t) => t.id) : null);
     engine.load(track, true);
     setView('player');
   };
 
   const stepTrack = (dir: 1 | -1) => {
-    if (!ordered.length) return;
-    if (shuffle && ordered.length > 1) {
+    if (!queue.length) return;
+    if (shuffle && queue.length > 1) {
       let next = current;
-      while (next === current) next = ordered[Math.floor(Math.random() * ordered.length)];
+      while (next === current) next = queue[Math.floor(Math.random() * queue.length)];
       if (next) engine.load(next, true);
       return;
     }
-    const idx = ordered.findIndex((t) => t.id === engine.currentId);
-    const next = ordered[(idx + dir + ordered.length) % ordered.length] ?? ordered[0];
+    const idx = queue.findIndex((t) => t.id === engine.currentId);
+    const next = queue[(idx + dir + queue.length) % queue.length] ?? queue[0];
     engine.load(next, true);
   };
 
@@ -101,13 +116,13 @@ export default function App() {
         engine.resume();
         return;
       }
-      const idx = ordered.findIndex((t) => t.id === engine.currentId);
-      if (repeat === 'off' && !shuffle && idx === ordered.length - 1) return;
+      const idx = queue.findIndex((t) => t.id === engine.currentId);
+      if (repeat === 'off' && !shuffle && idx === queue.length - 1) return;
       stepTrack(1);
     });
     return () => { unsub(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ordered, repeat, shuffle]);
+  }, [queue, repeat, shuffle]);
 
   // Android notification / lock screen / headset buttons
   const stepRef = useRef(stepTrack);
@@ -147,13 +162,24 @@ export default function App() {
   };
 
   const toggleLike = (id: string) => {
-    if (likedRef.current.has(id)) likedRef.current.delete(id);
-    else likedRef.current.add(id);
-    setTracks((p) => [...p]);
+    setLiked((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      return n;
+    });
   };
 
+  const createList = (name: string, firstId?: string) => {
+    const n = name.trim();
+    if (!n) return;
+    setPlaylists((p) => [...p, { id: `pl-${Date.now()}`, name: n, ids: firstId ? [firstId] : [] }]);
+  };
+  const toggleInList = (listId: string, trackId: string) =>
+    setPlaylists((p) => p.map((l) => (l.id !== listId ? l : { ...l, ids: l.ids.includes(trackId) ? l.ids.filter((i) => i !== trackId) : [...l.ids, trackId] })));
+  const deleteList = (id: string) => setPlaylists((p) => p.filter((l) => l.id !== id));
+
   const grouped = useMemo(() => {
-    if (tab === 'songs') return null;
+    if (tab === 'songs' || tab === 'liked' || tab === 'lists') return null;
     const key = tab === 'albums' ? 'album' : 'artist';
     const map = new Map<string, Track[]>();
     for (const t of ordered) {
@@ -217,12 +243,12 @@ export default function App() {
           <>
             {/* tabs + sort */}
             <div className="mb-4 flex items-center justify-between gap-2">
-              <div className="glass flex rounded-full p-1">
-                {(['songs', 'albums', 'artists'] as Tab[]).map((t) => (
+              <div className="glass flex min-w-0 overflow-x-auto rounded-full p-1">
+                {(['songs', 'albums', 'artists', 'liked', 'lists'] as Tab[]).map((t) => (
                   <button
                     key={t}
                     onClick={() => setTab(t)}
-                    className={`rounded-full px-4 py-1.5 text-xs font-medium uppercase tracking-[0.18em] transition-all duration-300 ${
+                    className={`shrink-0 rounded-full px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.12em] transition-all duration-300 ${
                       tab === t
                         ? 'bg-[#f6c944]/90 text-[#231b33] shadow-[0_0_20px_rgba(246,201,68,0.35)]'
                         : 'text-[#c4c3ff]/70 hover:text-[#e9e7ff]'
@@ -258,23 +284,34 @@ export default function App() {
 
             {loading ? (
               <p className="mt-16 text-center text-sm text-[#c4c3ff]/60">Composing the twilight…</p>
-            ) : tab === 'songs' ? (
+            ) : tab === 'lists' ? (
+              <PlaylistsView
+                playlists={playlists} tracks={tracks} liked={liked} snap={snap}
+                onPlay={playAt} onCreate={(n) => createList(n)} onDelete={deleteList}
+                onRemove={toggleInList} onLike={toggleLike}
+              />
+            ) : tab === 'songs' || tab === 'liked' ? (
               <ul className="flex flex-col gap-2">
-                {ordered.map((t, i) => (
+                {shown.map((t, i) => (
                   <SongRow
                     key={t.id}
                     track={t}
                     index={i}
                     active={t.id === snap.id}
                     playing={t.id === snap.id && snap.playing}
-                    liked={likedRef.current.has(t.id)}
-                    onPlay={() => playAt(t)}
+                    liked={liked.has(t.id)}
+                    onPlay={() => playAt(t, tab === 'liked' ? shown : undefined)}
                     onLike={() => toggleLike(t.id)}
+                    onAction={() => setAddFor(t.id)}
+                    actionIcon={<ListPlus size={16} />}
+                    actionLabel="Add to playlist"
                   />
                 ))}
-                {!ordered.length && (
+                {!shown.length && (tab === 'liked' ? (
+                  <p className="mt-12 text-center text-sm text-[#c4c3ff]/60">Tap the heart on a song and it will appear here.</p>
+                ) : (
                   <EmptyState onAdd={() => fileRef.current?.click()} />
-                )}
+                ))}
               </ul>
             ) : (
               <div className="flex flex-col gap-3">
@@ -303,7 +340,7 @@ export default function App() {
               snap={snap}
               shuffle={shuffle}
               repeat={repeat}
-              liked={likedRef.current.has(current.id)}
+              liked={liked.has(current.id)}
               onBack={() => setView('library')}
               onToggle={() => engine.toggle()}
               onPrev={() => stepTrack(-1)}
@@ -345,6 +382,29 @@ export default function App() {
       )}
 
       {/* queue drawer */}
+      {addFor && (
+        <div className="fixed inset-0 z-50 flex items-end bg-black/60" onClick={() => setAddFor(null)}>
+          <div className="mx-auto w-full max-w-md rounded-t-3xl border border-white/10 bg-[#120d2b]/95 p-5 backdrop-blur-xl" onClick={(e) => e.stopPropagation()}>
+            <p className="mb-3 text-xs uppercase tracking-[0.25em] text-[#c4c3ff]/60">Add to playlist</p>
+            <div className="mb-3 flex max-h-60 flex-col gap-1 overflow-y-auto">
+              {playlists.map((l) => (
+                <button key={l.id} onClick={() => toggleInList(l.id, addFor)} className="flex items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm active:bg-white/10">
+                  <span className="truncate">{l.name}</span>
+                  {l.ids.includes(addFor) && <Check size={16} className="text-[#f6c944]" />}
+                </button>
+              ))}
+              {!playlists.length && <p className="px-3 py-2 text-sm text-[#c4c3ff]/50">No playlists yet — create one below.</p>}
+            </div>
+            <div className="flex gap-2">
+              <input value={newName} onChange={(e) => setNewName(e.target.value)} dir="auto" placeholder="New playlist name"
+                className="min-w-0 flex-1 rounded-xl bg-white/10 px-3 py-2.5 text-sm outline-none placeholder:text-[#c4c3ff]/40" />
+              <button onClick={() => { createList(newName, addFor); setNewName(''); setAddFor(null); }}
+                className="rounded-xl bg-[#f6c944] px-4 text-sm font-medium text-[#231b33]">Create</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {queueOpen && (
         <div className="fixed inset-0 z-30 flex justify-center bg-black/40 backdrop-blur-sm" onClick={() => setQueueOpen(false)}>
           <div
@@ -356,7 +416,7 @@ export default function App() {
               <ListMusic size={16} /> Up next
             </h2>
             <ul className="flex max-h-[50vh] flex-col gap-1 overflow-y-auto">
-              {ordered.map((t) => (
+              {queue.map((t) => (
                 <li key={t.id}>
                   <button
                     onClick={() => { playAt(t); setQueueOpen(false); }}
@@ -393,9 +453,10 @@ function GlassButton({ children, onClick, label }: { children: React.ReactNode; 
   );
 }
 
-function SongRow({ track, index, active, playing, liked, onPlay, onLike }: {
+function SongRow({ track, index, active, playing, liked, onPlay, onLike, onAction, actionIcon, actionLabel }: {
   track: Track; index: number; active: boolean; playing: boolean; liked: boolean;
   onPlay: () => void; onLike: () => void;
+  onAction?: () => void; actionIcon?: React.ReactNode; actionLabel?: string;
 }) {
   return (
     <li
@@ -422,6 +483,11 @@ function SongRow({ track, index, active, playing, liked, onPlay, onLike }: {
           </p>
         </div>
       </button>
+      {onAction && (
+        <button onClick={onAction} aria-label={actionLabel} className="text-[#c4c3ff]/40 transition-all active:scale-90 hover:text-[#c4c3ff]">
+          {actionIcon}
+        </button>
+      )}
       <button
         onClick={onLike}
         aria-label="Like"
@@ -516,6 +582,54 @@ function NowPlaying({ track, snap, shuffle, repeat, liked, onBack, onToggle, onP
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function PlaylistsView({ playlists, tracks, liked, snap, onPlay, onCreate, onDelete, onRemove, onLike }: {
+  playlists: Playlist[]; tracks: Track[]; liked: Set<string>; snap: { id: string | null; playing: boolean };
+  onPlay: (t: Track, list: Track[]) => void; onCreate: (name: string) => void; onDelete: (id: string) => void;
+  onRemove: (listId: string, trackId: string) => void; onLike: (id: string) => void;
+}) {
+  const [open, setOpen] = useState<string | null>(null);
+  const [name, setName] = useState('');
+  const pl = playlists.find((p) => p.id === open);
+  if (pl) {
+    const list = pl.ids.map((id) => tracks.find((t) => t.id === id)).filter((t): t is Track => !!t);
+    return (
+      <div>
+        <div className="mb-3 flex items-center justify-between">
+          <button onClick={() => setOpen(null)} className="text-xs uppercase tracking-[0.2em] text-[#c4c3ff]/70">← Lists</button>
+          <button onClick={() => { onDelete(pl.id); setOpen(null); }} aria-label="Delete playlist" className="text-[#c4c3ff]/50 active:scale-90"><Trash2 size={16} /></button>
+        </div>
+        <h2 dir="auto" className="mb-3 text-lg font-medium">{pl.name}</h2>
+        <ul className="flex flex-col gap-2">
+          {list.map((t, i) => (
+            <SongRow key={t.id} track={t} index={i} active={t.id === snap.id} playing={t.id === snap.id && snap.playing}
+              liked={liked.has(t.id)} onPlay={() => onPlay(t, list)} onLike={() => onLike(t.id)}
+              onAction={() => onRemove(pl.id, t.id)} actionIcon={<X size={16} />} actionLabel="Remove from playlist" />
+          ))}
+        </ul>
+        {!list.length && <p className="mt-12 text-center text-sm text-[#c4c3ff]/60">Empty. Use the + button on any song to add it here.</p>}
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex gap-2">
+        <input value={name} onChange={(e) => setName(e.target.value)} dir="auto" placeholder="New playlist name"
+          className="glass min-w-0 flex-1 rounded-2xl px-4 py-3 text-sm outline-none placeholder:text-[#c4c3ff]/40" />
+        <button onClick={() => { onCreate(name); setName(''); }} className="rounded-2xl bg-[#f6c944] px-4 text-sm font-medium text-[#231b33]">Create</button>
+      </div>
+      {playlists.map((l) => (
+        <button key={l.id} onClick={() => setOpen(l.id)} className="glass flex items-center gap-4 rounded-3xl p-4 text-left active:scale-[0.98]">
+          <ListMusic size={22} className="text-[#f6c944]" />
+          <div className="min-w-0">
+            <p dir="auto" className="truncate font-medium">{l.name}</p>
+            <p className="text-xs text-[#c4c3ff]/60">{l.ids.length} track{l.ids.length === 1 ? '' : 's'}</p>
+          </div>
+        </button>
+      ))}
     </div>
   );
 }
