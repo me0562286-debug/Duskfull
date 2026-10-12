@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import {
   Play, Pause, SkipBack, SkipForward, Shuffle, Repeat, Repeat1, Heart,
   ChevronDown, LibraryBig, Search, Plus, ArrowDownUp, Music2, ListMusic, X, ListPlus, Trash2, Check,
@@ -57,7 +57,10 @@ export default function App() {
   useEffect(() => {
     if (isNative) {
       const scan = () => scanNative()
-        .then((t) => setTracks((prev) => [...t, ...prev.filter((p) => p.url.startsWith('blob:'))]))
+        .then((t) => setTracks((prev) => {
+          const next = [...t, ...prev.filter((p) => p.url.startsWith('blob:'))];
+          return next.length === prev.length && next.every((n, i) => n.id === prev[i].id) ? prev : next;
+        }))
         .catch(() => undefined)
         .finally(() => setLoading(false));
       void scan();
@@ -82,16 +85,21 @@ export default function App() {
   const current = tracks.find((t) => t.id === snap.id) ?? null;
 
   const shown = tab === 'liked' ? ordered.filter((t) => liked.has(t.id)) : ordered;
+  const shownRef = useRef(shown);
+  shownRef.current = shown;
+  const tabRef = useRef(tab);
+  tabRef.current = tab;
   const queue = useMemo(
     () => (queueIds ? (queueIds.map((id) => tracks.find((t) => t.id === id)).filter(Boolean) as Track[]) : ordered),
     [queueIds, tracks, ordered],
   );
 
-  const playAt = (track: Track, list?: Track[]) => {
+  const playAt = useCallback((track: Track, list?: Track[]) => {
     setQueueIds(list ? list.map((t) => t.id) : null);
     engine.load(track, true);
     setView('player');
-  };
+  }, []);
+  const playRow = useCallback((t: Track) => playAt(t, tabRef.current === 'liked' ? shownRef.current : undefined), [playAt]);
 
   const stepTrack = (dir: 1 | -1) => {
     if (!queue.length) return;
@@ -161,13 +169,13 @@ export default function App() {
     if (added.length) setTracks((prev) => [...prev, ...added]);
   };
 
-  const toggleLike = (id: string) => {
+  const toggleLike = useCallback((id: string) => {
     setLiked((prev) => {
       const n = new Set(prev);
       if (n.has(id)) n.delete(id); else n.add(id);
       return n;
     });
-  };
+  }, []);
 
   const createList = (name: string, firstId?: string) => {
     const n = name.trim();
@@ -194,19 +202,16 @@ export default function App() {
   }, [tab, ordered, sortDir]);
 
   return (
-    <div className="relative min-h-dvh overflow-hidden font-sans text-[#e9e7ff]">
+    <div className="relative min-h-dvh overflow-hidden font-sans text-[#e8ecf4]">
       <Backdrop />
 
       {/* app shell: centered phone-column */}
-      <div className="relative z-10 mx-auto flex min-h-dvh w-full max-w-md flex-col px-4 pb-28 pt-6 sm:px-0">
+      <div className="relative z-10 mx-auto flex min-h-dvh w-full max-w-md flex-col px-4 pb-40 pt-6 sm:px-0">
 
         {/* header */}
         <header className="mb-5 flex items-end justify-between px-1">
           <div>
-            <p className="text-[11px] uppercase tracking-[0.4em] text-[#c4c3ff]/70">dusk → night</p>
-            <h1 className="mt-1 font-display text-4xl font-semibold tracking-tight bg-clip-text text-transparent bg-[linear-gradient(120deg,#eddccf,#f6c944_45%,#c4c3ff)]">
-              Duskfall
-            </h1>
+            <h1 className="text-3xl font-bold tracking-tight text-[#e8ecf4]">Duskfall</h1>
           </div>
           <div className="flex gap-2">
             <GlassButton onClick={() => setSearchOpen((v) => !v)} label="Search">
@@ -228,13 +233,13 @@ export default function App() {
 
         {searchOpen && (
           <div className="glass mb-4 flex items-center gap-2 rounded-2xl px-4 py-2.5">
-            <Search size={16} className="text-[#c4c3ff]/60" />
+            <Search size={16} className="text-[#8b97ab]/60" />
             <input
               autoFocus
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search the night…"
-              className="w-full bg-transparent text-sm outline-none placeholder:text-[#c4c3ff]/40"
+              className="w-full bg-transparent text-sm outline-none placeholder:text-[#8b97ab]/40"
             />
           </div>
         )}
@@ -243,15 +248,15 @@ export default function App() {
           <>
             {/* tabs + sort */}
             <div className="mb-4 flex items-center justify-between gap-2">
-              <div className="glass flex min-w-0 overflow-x-auto rounded-full p-1">
-                {(['songs', 'albums', 'artists', 'liked', 'lists'] as Tab[]).map((t) => (
+              <div className={`glass flex min-w-0 overflow-x-auto rounded-full p-1 ${tab === 'liked' || tab === 'lists' ? 'invisible' : ''}`}>
+                {(['songs', 'albums', 'artists'] as Tab[]).map((t) => (
                   <button
                     key={t}
                     onClick={() => setTab(t)}
                     className={`shrink-0 rounded-full px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.12em] transition-all duration-300 ${
                       tab === t
-                        ? 'bg-[#f6c944]/90 text-[#231b33] shadow-[0_0_20px_rgba(246,201,68,0.35)]'
-                        : 'text-[#c4c3ff]/70 hover:text-[#e9e7ff]'
+                        ? 'bg-[#6ee7b7]/90 text-[#04110c] shadow-[0_0_20px_rgba(110,231,183,0.35)]'
+                        : 'text-[#8b97ab]/70 hover:text-[#e8ecf4]'
                     }`}
                   >
                     {t}
@@ -266,7 +271,7 @@ export default function App() {
               </GlassButton>
             </div>
 
-            <p className="mb-3 px-1 text-[11px] uppercase tracking-[0.3em] text-[#c4c3ff]/50">
+            <p className="mb-3 px-1 text-[11px] uppercase tracking-[0.3em] text-[#8b97ab]/50">
               {sortDir === 'oldest' ? 'oldest → newest' : 'newest → oldest'} · {ordered.length} tracks
             </p>
 
@@ -277,13 +282,13 @@ export default function App() {
                 setShuffle(true);
                 playAt(ordered[Math.floor(Math.random() * ordered.length)]);
               }}
-              className="glass-strong mb-5 flex w-full items-center justify-center gap-2 rounded-2xl py-3 text-sm font-medium tracking-wide text-[#231b33] transition-transform active:scale-[0.98]"
+              className="glass-strong mb-5 flex w-full items-center justify-center gap-2 rounded-2xl py-3 text-sm font-medium tracking-wide text-[#04110c] transition-transform active:scale-[0.98]"
             >
               <Shuffle size={16} /> Shuffle the sky
             </button>
 
             {loading ? (
-              <p className="mt-16 text-center text-sm text-[#c4c3ff]/60">Composing the twilight…</p>
+              <p className="mt-16 text-center text-sm text-[#8b97ab]/60">Composing the twilight…</p>
             ) : tab === 'lists' ? (
               <PlaylistsView
                 playlists={playlists} tracks={tracks} liked={liked} snap={snap}
@@ -292,23 +297,22 @@ export default function App() {
               />
             ) : tab === 'songs' || tab === 'liked' ? (
               <ul className="flex flex-col gap-2">
-                {shown.map((t, i) => (
+                {shown.map((t) => (
                   <SongRow
                     key={t.id}
                     track={t}
-                    index={i}
                     active={t.id === snap.id}
                     playing={t.id === snap.id && snap.playing}
                     liked={liked.has(t.id)}
-                    onPlay={() => playAt(t, tab === 'liked' ? shown : undefined)}
-                    onLike={() => toggleLike(t.id)}
-                    onAction={() => setAddFor(t.id)}
+                    onPlay={playRow}
+                    onLike={toggleLike}
+                    onAction={setAddFor}
                     actionIcon={<ListPlus size={16} />}
                     actionLabel="Add to playlist"
                   />
                 ))}
                 {!shown.length && (tab === 'liked' ? (
-                  <p className="mt-12 text-center text-sm text-[#c4c3ff]/60">Tap the heart on a song and it will appear here.</p>
+                  <p className="mt-12 text-center text-sm text-[#8b97ab]/60">Tap the heart on a song and it will appear here.</p>
                 ) : (
                   <EmptyState onAdd={() => fileRef.current?.click()} />
                 ))}
@@ -324,7 +328,7 @@ export default function App() {
                     <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-2xl ring-1 ring-white/20" style={coverStyle(ts[0].hue)}><CoverArt track={ts[0]} className="absolute inset-0 h-full w-full" /></div>
                     <div className="min-w-0">
                       <p className="truncate font-medium">{name}</p>
-                      <p className="text-xs text-[#c4c3ff]/60">
+                      <p className="text-xs text-[#8b97ab]/60">
                         {ts.length} track{ts.length > 1 ? 's' : ''} · since {fmtDate(Math.min(...ts.map((t) => t.addedAt)))}
                       </p>
                     </div>
@@ -355,26 +359,40 @@ export default function App() {
         )}
       </div>
 
+      {view === 'library' && (
+        <nav className="fixed inset-x-0 bottom-0 z-30 mx-auto flex h-16 max-w-md border-t border-white/[0.06] bg-[#05070c]/95">
+          {([['songs', Music2, 'Songs'], ['liked', Heart, 'Liked'], ['lists', ListMusic, 'Lists']] as const).map(([k, Icon, label]) => {
+            const on = k === 'songs' ? tab !== 'liked' && tab !== 'lists' : tab === k;
+            return (
+              <button key={k} onClick={() => setTab(k)} aria-label={label}
+                className={`flex flex-1 flex-col items-center justify-center gap-1 text-[11px] font-semibold ${on ? 'text-[#6ee7b7]' : 'text-[#8b97ab]'}`}>
+                <Icon size={22} />{label}
+              </button>
+            );
+          })}
+        </nav>
+      )}
+
       {/* mini player */}
       {current && view === 'library' && (
         <button
           onClick={() => setView('player')}
-          className="glass fixed inset-x-0 bottom-4 z-20 mx-auto flex w-[calc(100%-2rem)] max-w-md items-center gap-3 rounded-3xl p-3 text-left shadow-[0_20px_60px_-10px_rgba(0,0,0,0.7)]"
+          className="glass fixed inset-x-0 bottom-20 z-20 mx-auto flex w-[calc(100%-2rem)] max-w-md items-center gap-3 rounded-3xl p-3 text-left shadow-[0_20px_60px_-10px_rgba(0,0,0,0.7)]"
         >
           <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-2xl ring-1 ring-white/20" style={coverStyle(current.hue)}><CoverArt track={current} className="absolute inset-0 h-full w-full" /></div>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium">{current.title}</p>
-            <p className="truncate text-xs text-[#c4c3ff]/60">{current.artist}</p>
+            <p className="truncate text-xs text-[#8b97ab]/60">{current.artist}</p>
           </div>
           <span
             onClick={(e) => { e.stopPropagation(); engine.toggle(); }}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-[#f6c944] text-[#231b33] shadow-[0_0_18px_rgba(246,201,68,0.45)]"
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-[#6ee7b7] text-[#04110c] shadow-[0_0_18px_rgba(110,231,183,0.45)]"
           >
             {snap.playing ? <Pause size={16} /> : <Play size={16} className="ml-0.5" />}
           </span>
           <span
             onClick={(e) => { e.stopPropagation(); stepTrack(1); }}
-            className="flex h-10 w-10 items-center justify-center rounded-full text-[#c4c3ff]/80"
+            className="flex h-10 w-10 items-center justify-center rounded-full text-[#8b97ab]/80"
           >
             <SkipForward size={16} />
           </span>
@@ -385,21 +403,21 @@ export default function App() {
       {addFor && (
         <div className="fixed inset-0 z-50 flex items-end bg-black/60" onClick={() => setAddFor(null)}>
           <div className="mx-auto w-full max-w-md rounded-t-3xl border border-white/10 bg-[#120d2b]/95 p-5 backdrop-blur-xl" onClick={(e) => e.stopPropagation()}>
-            <p className="mb-3 text-xs uppercase tracking-[0.25em] text-[#c4c3ff]/60">Add to playlist</p>
+            <p className="mb-3 text-xs uppercase tracking-[0.25em] text-[#8b97ab]/60">Add to playlist</p>
             <div className="mb-3 flex max-h-60 flex-col gap-1 overflow-y-auto">
               {playlists.map((l) => (
                 <button key={l.id} onClick={() => toggleInList(l.id, addFor)} className="flex items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm active:bg-white/10">
                   <span className="truncate">{l.name}</span>
-                  {l.ids.includes(addFor) && <Check size={16} className="text-[#f6c944]" />}
+                  {l.ids.includes(addFor) && <Check size={16} className="text-[#6ee7b7]" />}
                 </button>
               ))}
-              {!playlists.length && <p className="px-3 py-2 text-sm text-[#c4c3ff]/50">No playlists yet — create one below.</p>}
+              {!playlists.length && <p className="px-3 py-2 text-sm text-[#8b97ab]/50">No playlists yet — create one below.</p>}
             </div>
             <div className="flex gap-2">
               <input value={newName} onChange={(e) => setNewName(e.target.value)} dir="auto" placeholder="New playlist name"
-                className="min-w-0 flex-1 rounded-xl bg-white/10 px-3 py-2.5 text-sm outline-none placeholder:text-[#c4c3ff]/40" />
+                className="min-w-0 flex-1 rounded-xl bg-white/10 px-3 py-2.5 text-sm outline-none placeholder:text-[#8b97ab]/40" />
               <button onClick={() => { createList(newName, addFor); setNewName(''); setAddFor(null); }}
-                className="rounded-xl bg-[#f6c944] px-4 text-sm font-medium text-[#231b33]">Create</button>
+                className="rounded-xl bg-[#6ee7b7] px-4 text-sm font-medium text-[#04110c]">Create</button>
             </div>
           </div>
         </div>
@@ -412,7 +430,7 @@ export default function App() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-white/20" />
-            <h2 className="mb-3 flex items-center gap-2 text-sm font-medium uppercase tracking-[0.25em] text-[#c4c3ff]/80">
+            <h2 className="mb-3 flex items-center gap-2 text-sm font-medium uppercase tracking-[0.25em] text-[#8b97ab]/80">
               <ListMusic size={16} /> Up next
             </h2>
             <ul className="flex max-h-[50vh] flex-col gap-1 overflow-y-auto">
@@ -421,7 +439,7 @@ export default function App() {
                   <button
                     onClick={() => { playAt(t); setQueueOpen(false); }}
                     className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm ${
-                      t.id === snap.id ? 'bg-white/10 text-[#f6c944]' : 'hover:bg-white/5'
+                      t.id === snap.id ? 'bg-white/10 text-[#6ee7b7]' : 'hover:bg-white/5'
                     }`}
                   >
                     <Music2 size={14} className="shrink-0 opacity-60" />
@@ -446,65 +464,64 @@ function GlassButton({ children, onClick, label }: { children: React.ReactNode; 
       aria-label={label}
       title={label}
       onClick={onClick}
-      className="glass flex h-10 w-10 items-center justify-center rounded-full text-[#c4c3ff] transition-all hover:text-white active:scale-95"
+      className="glass flex h-10 w-10 items-center justify-center rounded-full text-[#8b97ab] transition-all hover:text-white active:scale-95"
     >
       {children}
     </button>
   );
 }
 
-function SongRow({ track, index, active, playing, liked, onPlay, onLike, onAction, actionIcon, actionLabel }: {
-  track: Track; index: number; active: boolean; playing: boolean; liked: boolean;
-  onPlay: () => void; onLike: () => void;
-  onAction?: () => void; actionIcon?: React.ReactNode; actionLabel?: string;
+const SongRow = memo(function SongRow({ track, active, playing, liked, onPlay, onLike, onAction, actionIcon, actionLabel }: {
+  track: Track; active: boolean; playing: boolean; liked: boolean;
+  onPlay: (t: Track) => void; onLike: (id: string) => void;
+  onAction?: (id: string) => void; actionIcon?: React.ReactNode; actionLabel?: string;
 }) {
   return (
     <li
       className={`glass group flex items-center gap-3 rounded-2xl p-2.5 pl-3 transition-all duration-300 ${
-        active ? 'ring-1 ring-[#f6c944]/40 bg-white/[0.09]' : ''
+        active ? 'ring-1 ring-[#6ee7b7]/40 bg-white/[0.09]' : ''
       }`}
-      style={{ animationDelay: `${index * 40}ms` }}
     >
-      <button onClick={onPlay} className="flex min-w-0 flex-1 items-center gap-3 text-left">
+      <button onClick={() => onPlay(track)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
         <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-xl ring-1 ring-white/15" style={coverStyle(track.hue)}>
           <CoverArt track={track} className="absolute inset-0 h-full w-full" />
           {playing && (
             <span className="absolute inset-0 flex items-center justify-center gap-[2px] bg-black/35">
               {[0, 1, 2].map((i) => (
-                <span key={i} className="eq-bar w-[3px] rounded-full bg-[#f6c944]" style={{ animationDelay: `${i * 0.18}s` }} />
+                <span key={i} className="eq-bar w-[3px] rounded-full bg-[#6ee7b7]" style={{ animationDelay: `${i * 0.18}s` }} />
               ))}
             </span>
           )}
         </div>
         <div className="min-w-0">
-          <p className={`truncate text-sm font-medium ${active ? 'text-[#f6c944]' : ''}`}>{track.title}</p>
-          <p className="truncate text-xs text-[#c4c3ff]/60">
+          <p className={`truncate text-sm font-medium ${active ? 'text-[#6ee7b7]' : ''}`}>{track.title}</p>
+          <p className="truncate text-xs text-[#8b97ab]/60">
             {track.artist} · {fmtDate(track.addedAt)}
           </p>
         </div>
       </button>
       {onAction && (
-        <button onClick={onAction} aria-label={actionLabel} className="text-[#c4c3ff]/40 transition-all active:scale-90 hover:text-[#c4c3ff]">
+        <button onClick={() => onAction(track.id)} aria-label={actionLabel} className="text-[#8b97ab]/40 transition-all active:scale-90 hover:text-[#8b97ab]">
           {actionIcon}
         </button>
       )}
       <button
-        onClick={onLike}
+        onClick={() => onLike(track.id)}
         aria-label="Like"
-        className={`mr-1 transition-all active:scale-90 ${liked ? 'text-[#ff8f5c]' : 'text-[#c4c3ff]/40 hover:text-[#c4c3ff]'}`}
+        className={`mr-1 transition-all active:scale-90 ${liked ? 'text-[#34d399]' : 'text-[#8b97ab]/40 hover:text-[#8b97ab]'}`}
       >
         <Heart size={16} fill={liked ? 'currentColor' : 'none'} />
       </button>
     </li>
   );
-}
+});
 
 function EmptyState({ onAdd }: { onAdd: () => void }) {
   return (
     <div className="glass mt-8 rounded-3xl p-8 text-center">
-      <LibraryBig className="mx-auto mb-3 text-[#c4c3ff]/50" size={28} />
-      <p className="text-sm text-[#c4c3ff]/80">The sky is empty.</p>
-      <button onClick={onAdd} className="glass-strong mt-4 rounded-full px-5 py-2 text-sm font-medium text-[#231b33]">
+      <LibraryBig className="mx-auto mb-3 text-[#8b97ab]/50" size={28} />
+      <p className="text-sm text-[#8b97ab]/80">The sky is empty.</p>
+      <button onClick={onAdd} className="glass-strong mt-4 rounded-full px-5 py-2 text-sm font-medium text-[#04110c]">
         Add music from this device
       </button>
     </div>
@@ -527,7 +544,7 @@ function NowPlaying({ track, snap, shuffle, repeat, liked, onBack, onToggle, onP
         <GlassButton onClick={onBack} label="Back to library">
           <ChevronDown size={20} />
         </GlassButton>
-        <p className="text-[11px] uppercase tracking-[0.4em] text-[#c4c3ff]/70">now playing</p>
+        <p className="text-[11px] uppercase tracking-[0.4em] text-[#8b97ab]/70">now playing</p>
         <GlassButton onClick={onQueue} label="Queue">
           <ListMusic size={18} />
         </GlassButton>
@@ -537,16 +554,16 @@ function NowPlaying({ track, snap, shuffle, repeat, liked, onBack, onToggle, onP
         {/* inner starlight */}
         <div className="pointer-events-none absolute inset-0 rounded-[2.5rem] bg-[radial-gradient(80%_50%_at_50%_0%,rgba(196,195,255,0.10),transparent)]" />
 
-        <CoverOrb track={track} size={270} />
+        <CoverOrb track={track} size={300} />
 
         <div className="mt-8 w-full text-center">
           <h2 className="truncate font-display text-2xl font-semibold tracking-tight">{track.title}</h2>
-          <p className="mt-1 text-sm text-[#c4c3ff]/70">{track.artist} — {track.album}</p>
+          <p className="mt-1 text-sm text-[#8b97ab]/70">{track.artist} — {track.album}</p>
         </div>
 
         <div className="mt-6 w-full">
           <WaveSeek progress={progress} onSeek={onSeek} />
-          <div className="flex justify-between text-xs tabular-nums text-[#c4c3ff]/60">
+          <div className="flex justify-between text-xs tabular-nums text-[#8b97ab]/60">
             <span>{fmt(snap.time)}</span>
             <span>{fmt(dur)}</span>
           </div>
@@ -554,30 +571,30 @@ function NowPlaying({ track, snap, shuffle, repeat, liked, onBack, onToggle, onP
 
         {/* transport */}
         <div className="mt-5 flex w-full items-center justify-center gap-6">
-          <button onClick={onPrev} aria-label="Previous" className="text-[#c4c3ff] transition-all hover:text-white active:scale-90">
+          <button onClick={onPrev} aria-label="Previous" className="text-[#8b97ab] transition-all hover:text-white active:scale-90">
             <SkipBack size={26} fill="currentColor" />
           </button>
           <button
             onClick={onToggle}
             aria-label={snap.playing ? 'Pause' : 'Play'}
-            className="flex h-[76px] w-[76px] items-center justify-center rounded-[1.75rem] bg-gradient-to-br from-[#f6c944] to-[#ff8f5c] text-[#231b33] shadow-[0_10px_40px_-5px_rgba(246,201,68,0.55),inset_0_2px_2px_rgba(255,255,255,0.5)] transition-transform active:scale-95"
+            className="flex h-[76px] w-[76px] items-center justify-center rounded-[1.75rem] bg-gradient-to-br from-[#6ee7b7] to-[#34d399] text-[#04110c] shadow-[0_10px_40px_-5px_rgba(110,231,183,0.55),inset_0_2px_2px_rgba(255,255,255,0.5)] transition-transform active:scale-95"
           >
             {snap.playing ? <Pause size={30} fill="currentColor" /> : <Play size={30} fill="currentColor" className="ml-1" />}
           </button>
-          <button onClick={onNext} aria-label="Next" className="text-[#c4c3ff] transition-all hover:text-white active:scale-90">
+          <button onClick={onNext} aria-label="Next" className="text-[#8b97ab] transition-all hover:text-white active:scale-90">
             <SkipForward size={26} fill="currentColor" />
           </button>
         </div>
 
         {/* modes */}
         <div className="glass mt-7 flex w-full items-center justify-between rounded-2xl p-2 px-4">
-          <button onClick={onShuffle} aria-label="Shuffle" className={`p-2 transition-all active:scale-90 ${shuffle ? 'text-[#f6c944]' : 'text-[#c4c3ff]/50'}`}>
+          <button onClick={onShuffle} aria-label="Shuffle" className={`p-2 transition-all active:scale-90 ${shuffle ? 'text-[#6ee7b7]' : 'text-[#8b97ab]/50'}`}>
             <Shuffle size={18} />
           </button>
-          <button onClick={onRepeat} aria-label="Repeat" className={`p-2 transition-all active:scale-90 ${repeat !== 'off' ? 'text-[#f6c944]' : 'text-[#c4c3ff]/50'}`}>
+          <button onClick={onRepeat} aria-label="Repeat" className={`p-2 transition-all active:scale-90 ${repeat !== 'off' ? 'text-[#6ee7b7]' : 'text-[#8b97ab]/50'}`}>
             {repeat === 'one' ? <Repeat1 size={18} /> : <Repeat size={18} />}
           </button>
-          <button onClick={onLike} aria-label="Like" className={`p-2 transition-all active:scale-90 ${liked ? 'text-[#ff8f5c]' : 'text-[#c4c3ff]/50'}`}>
+          <button onClick={onLike} aria-label="Like" className={`p-2 transition-all active:scale-90 ${liked ? 'text-[#34d399]' : 'text-[#8b97ab]/50'}`}>
             <Heart size={18} fill={liked ? 'currentColor' : 'none'} />
           </button>
         </div>
@@ -599,18 +616,18 @@ function PlaylistsView({ playlists, tracks, liked, snap, onPlay, onCreate, onDel
     return (
       <div>
         <div className="mb-3 flex items-center justify-between">
-          <button onClick={() => setOpen(null)} className="text-xs uppercase tracking-[0.2em] text-[#c4c3ff]/70">← Lists</button>
-          <button onClick={() => { onDelete(pl.id); setOpen(null); }} aria-label="Delete playlist" className="text-[#c4c3ff]/50 active:scale-90"><Trash2 size={16} /></button>
+          <button onClick={() => setOpen(null)} className="text-xs uppercase tracking-[0.2em] text-[#8b97ab]/70">← Lists</button>
+          <button onClick={() => { onDelete(pl.id); setOpen(null); }} aria-label="Delete playlist" className="text-[#8b97ab]/50 active:scale-90"><Trash2 size={16} /></button>
         </div>
         <h2 dir="auto" className="mb-3 text-lg font-medium">{pl.name}</h2>
         <ul className="flex flex-col gap-2">
-          {list.map((t, i) => (
-            <SongRow key={t.id} track={t} index={i} active={t.id === snap.id} playing={t.id === snap.id && snap.playing}
-              liked={liked.has(t.id)} onPlay={() => onPlay(t, list)} onLike={() => onLike(t.id)}
-              onAction={() => onRemove(pl.id, t.id)} actionIcon={<X size={16} />} actionLabel="Remove from playlist" />
+          {list.map((t) => (
+            <SongRow key={t.id} track={t} active={t.id === snap.id} playing={t.id === snap.id && snap.playing}
+              liked={liked.has(t.id)} onPlay={(x) => onPlay(x, list)} onLike={onLike}
+              onAction={(id) => onRemove(pl.id, id)} actionIcon={<X size={16} />} actionLabel="Remove from playlist" />
           ))}
         </ul>
-        {!list.length && <p className="mt-12 text-center text-sm text-[#c4c3ff]/60">Empty. Use the + button on any song to add it here.</p>}
+        {!list.length && <p className="mt-12 text-center text-sm text-[#8b97ab]/60">Empty. Use the + button on any song to add it here.</p>}
       </div>
     );
   }
@@ -618,18 +635,18 @@ function PlaylistsView({ playlists, tracks, liked, snap, onPlay, onCreate, onDel
     <div className="flex flex-col gap-3">
       <div className="flex gap-2">
         <input value={name} onChange={(e) => setName(e.target.value)} dir="auto" placeholder="New playlist name"
-          className="glass min-w-0 flex-1 rounded-2xl px-4 py-3 text-sm outline-none placeholder:text-[#c4c3ff]/40" />
-        <button onClick={() => { onCreate(name); setName(''); }} className="rounded-2xl bg-[#f6c944] px-4 text-sm font-medium text-[#231b33]">Create</button>
+          className="glass min-w-0 flex-1 rounded-2xl px-4 py-3 text-sm outline-none placeholder:text-[#8b97ab]/40" />
+        <button onClick={() => { onCreate(name); setName(''); }} className="rounded-2xl bg-[#6ee7b7] px-4 text-sm font-medium text-[#04110c]">Create</button>
       </div>
       {playlists.map((l) => (
         <button key={l.id} onClick={() => setOpen(l.id)} className="glass flex items-center gap-4 rounded-3xl p-4 text-left active:scale-[0.98]">
-          <ListMusic size={22} className="text-[#f6c944]" />
+          <ListMusic size={22} className="text-[#6ee7b7]" />
           <div className="min-w-0">
             <p dir="auto" className="truncate font-medium">{l.name}</p>
-            <p className="text-xs text-[#c4c3ff]/60">{l.ids.length} track{l.ids.length === 1 ? '' : 's'}</p>
+            <p className="text-xs text-[#8b97ab]/60">{l.ids.length} track{l.ids.length === 1 ? '' : 's'}</p>
           </div>
         </button>
       ))}
     </div>
   );
-}
+                                        }
