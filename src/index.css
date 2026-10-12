@@ -1,4 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=Unbounded:wght@400;500;600&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -80,12 +79,12 @@
     color-scheme: dark;
   }
   body {
-    background: #07061a;
-    font-family: 'Sora', -apple-system, 'PingFang SC', sans-serif;
+    background: #04050a;
+    font-family: 'Manrope Variable', system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
   }
   ::selection {
-    background: rgba(246, 201, 68, 0.25);
+    background: rgba(110, 231, 183, 0.25);
     color: #fff;
   }
   * {
@@ -99,31 +98,19 @@
 
 @layer utilities {
   .font-display {
-    font-family: 'Unbounded', 'Sora', sans-serif;
+    font-family: 'Manrope Variable', system-ui, sans-serif;
   }
 }
 
 /* ---- dusk glass material ---- */
 .glass {
   position: relative;
-  background:
-    linear-gradient(150deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.02) 40%, rgba(196, 195, 255, 0.04)),
-    rgba(19, 17, 54, 0.42);
-  backdrop-filter: blur(28px) saturate(1.4);
-  -webkit-backdrop-filter: blur(28px) saturate(1.4);
-  border: 1px solid rgba(233, 231, 255, 0.10);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.14),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.15),
-    0 18px 50px -20px rgba(0, 0, 0, 0.65);
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.07);
 }
 
 .glass-strong {
-  background: linear-gradient(120deg, #f6c944, #ffb25c);
-  box-shadow:
-    0 0 26px rgba(246, 201, 68, 0.35),
-    inset 0 2px 2px rgba(255, 255, 255, 0.5),
-    0 14px 30px -12px rgba(255, 143, 12, 0.5);
+  background: #6ee7b7;
 }
 
 /* mini equalizer bars on the active song row */
@@ -142,5 +129,6 @@
   to { opacity: 1; transform: translateY(0); }
 }
 ul > li {
-  animation: rise 0.5s cubic-bezier(0.19, 1, 0.22, 1) both;
-}
+  content-visibility: auto;
+  contain-intrinsic-size: auto 64px;
+  }
