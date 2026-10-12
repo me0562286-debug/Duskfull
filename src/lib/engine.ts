@@ -36,7 +36,10 @@ class Engine {
     this.audio.addEventListener('loadedmetadata', () => this.emit());
   }
 
+  private static readonly useAnalyser = false; // plain <audio>: lighter and keeps playing in background
+
   private ensureGraph() {
+    if (!Engine.useAnalyser) return;
     if (this.ctx) {
       if (this.ctx.state === 'suspended') void this.ctx.resume();
       return;
