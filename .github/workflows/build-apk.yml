@@ -15,6 +15,8 @@ jobs:
       - run: npm install
       - run: npm run build
       - run: npx cap add android
+      - name: App icon
+        run: npx @capacitor/assets generate --android --iconBackgroundColor '#04050a' --iconBackgroundColorDark '#04050a'
       - name: Add the music plugin, playback service and permissions
         run: |
           PKG=android/app/src/main/java/com/duskfall/player
