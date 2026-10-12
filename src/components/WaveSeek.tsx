@@ -55,15 +55,15 @@ export default function WaveSeek({ progress, onSeek }: Props) {
       onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}
       role="slider" aria-label="Seek" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress * 100)}>
       <svg viewBox={`0 0 100 ${H}`} preserveAspectRatio="none" className="h-full w-full">
-        <path d={wave(0, 1, 0)} fill="none" stroke="rgba(233,231,255,0.18)" strokeWidth="1.6" vectorEffect="non-scaling-stroke" />
+        <path d={wave(0, 1, 0)} fill="none" stroke="rgba(232,236,244,0.18)" strokeWidth="1.6" vectorEffect="non-scaling-stroke" />
         <path ref={played} fill="none" stroke="url(#seekGrad)" strokeWidth="2.4" vectorEffect="non-scaling-stroke" strokeLinecap="round" />
         <defs>
           <linearGradient id="seekGrad" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0" stopColor="#f6c944" /><stop offset="1" stopColor="#ff8f5c" />
+            <stop offset="0" stopColor="#6ee7b7" /><stop offset="1" stopColor="#34d399" />
           </linearGradient>
         </defs>
       </svg>
-      <div ref={thumb} className="pointer-events-none absolute left-0 top-1/2 -ml-2 h-4 w-4 rounded-full bg-[#f6c944] shadow-[0_0_14px_rgba(246,201,68,0.9)]" />
+      <div ref={thumb} className="pointer-events-none absolute left-0 top-1/2 -ml-2 h-4 w-4 rounded-full bg-[#6ee7b7] shadow-[0_0_14px_rgba(110,231,183,0.9)]" />
     </div>
   );
 }
